@@ -1,0 +1,1 @@
+"""Vaikkal - Farm to home digital marketplace."""
