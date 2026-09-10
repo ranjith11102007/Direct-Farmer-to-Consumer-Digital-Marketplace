@@ -83,16 +83,14 @@ def test_role_authorization_admin_endpoint_denies_consumer():
     """A consumer token must not reach admin-only endpoints."""
     client = TestClient(app, raise_server_exceptions=False)
     phone = f"98{uuid.uuid4().int % 10**8:08d}"
-    register = client.post(
+    client.post(
         "/api/v1/auth/register",
         json={"phone": phone, "password": "Strong@Pass123", "full_name": "C", "role": "consumer"},
     )
-    print("ROLE_REGISTER_DEBUG", register.status_code, register.text, flush=True)
     login = client.post(
         "/api/v1/auth/login",
         json={"identifier": phone, "password": "Strong@Pass123"},
     )
-    print("ROLE_LOGIN_DEBUG", login.status_code, login.text, flush=True)
     token = login.json()["data"]["access_token"]
 
     # Admin dashboard (requires ADMIN role via router-level dependency)
@@ -110,7 +108,6 @@ def test_duplicate_registration_rejected():
     phone = f"99{uuid.uuid4().int % 10**8:08d}"
     payload = {"phone": phone, "password": "Strong@Pass123", "full_name": "Dup", "role": "consumer"}
     first = client.post("/api/v1/auth/register", json=payload)
-    print("DUP_FIRST_DEBUG", first.status_code, first.text, flush=True)
     assert first.status_code == 200
     second = client.post("/api/v1/auth/register", json=payload)
     assert second.status_code == 400
@@ -125,4 +122,4 @@ def test_catalog_endpoints_public():
     search = client.get("/api/v1/products/search", params={"q": "tomato"})
     assert search.status_code == 200
     body = search.json()
-    assert "data" in body
+    assert "items" in body

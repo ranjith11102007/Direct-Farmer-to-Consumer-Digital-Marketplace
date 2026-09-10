@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import redis.asyncio as redis
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -83,10 +83,11 @@ class AuthService:
         except ValidationError as exc:
             return {}, exc
 
+        match_clauses: list[Any] = [User.phone == normalized_phone]
+        if normalized_email:
+            match_clauses.append(User.email == normalized_email)
         existing = (await db.execute(
-            select(User).where(
-                (User.email == normalized_email) | (User.phone == normalized_phone)
-            )
+            select(User).where(or_(*match_clauses))
         )).scalar_one_or_none()
         if existing:
             return {}, ValidationError("An account with this email or phone already exists.")
