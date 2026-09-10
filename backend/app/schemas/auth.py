@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
@@ -54,6 +54,11 @@ class UserOut(BaseModel):
     avatar_url: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def coerce_id_to_str(cls, v: Any) -> Any:
+        return str(v)
 
 
 class TokenOut(BaseModel):

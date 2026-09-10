@@ -103,6 +103,7 @@ class SearchService:
         min_price: float | None = None,
         max_price: float | None = None,
         organic_only: bool = False,
+        producer_type: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> dict[str, Any]:
@@ -155,6 +156,8 @@ class SearchService:
             stmt = stmt.where(ProductListing.price_per_unit <= float(max_price))
         if organic_only:
             stmt = stmt.where(ProductListing.organic_certified.is_(True))
+        if producer_type:
+            stmt = stmt.where(ProductListing.producer_type == producer_type)
 
         stmt = stmt.order_by(
             ProductListing.organic_certified.desc(),
