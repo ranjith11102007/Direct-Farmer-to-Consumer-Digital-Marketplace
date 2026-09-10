@@ -64,7 +64,7 @@ async def _store_otp(phone: str, otp: str, hashed: str) -> None:
     try:
         r = _get_redis()
         await r.set(key, hashed, ex=settings.OTP_EXPIRE_SECONDS)
-    except redis.RedisError:
+    except Exception:
         _otp_memory[key] = hashed
         _otp_memory_expiry[key] = time.time() + settings.OTP_EXPIRE_SECONDS
 
@@ -74,7 +74,7 @@ async def _otp_get(key: str) -> str | None:
     try:
         r = _get_redis()
         return await r.get(key)
-    except redis.RedisError:
+    except Exception:
         value = _otp_memory.get(key)
         if value is None:
             return None
@@ -91,7 +91,7 @@ async def _otp_increment(key: str) -> int:
     try:
         r = _get_redis()
         return int(await r.incr(key))
-    except redis.RedisError:
+    except Exception:
         _otp_attempt_memory[key] = _otp_attempt_memory.get(key, 0) + 1
         return _otp_attempt_memory[key]
 
@@ -101,7 +101,7 @@ async def _otp_delete(*keys: str) -> None:
         r = _get_redis()
         if keys:
             await r.delete(*keys)
-    except redis.RedisError:
+    except Exception:
         pass
     for key in keys:
         _otp_memory.pop(key, None)

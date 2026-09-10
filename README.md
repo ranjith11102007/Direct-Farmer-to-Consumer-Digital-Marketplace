@@ -36,7 +36,8 @@ clean white layout, agricultural green identity, Tamil + English localization.
 ### Stack
 | Layer      | Technology |
 |------------|-----------|
-| Frontend   | Next.js 14, TypeScript, Tailwind CSS, zustand, React Query |
+| Frontend   | Next.js 14, TypeScript, Tailwind CSS, zustand, R
+eact Query |
 | Backend    | FastAPI, SQLAlchemy 2 (async), Pydantic v2 |
 | Database   | PostgreSQL 16 (asyncpg) |
 | Cache/Jobs | Redis 7 |

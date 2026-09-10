@@ -145,20 +145,24 @@ class RateLimiter:
         route = request.url.path
         key = f"{settings.REDIS_PREFIX}:rl:{client_ip}:{route}"
 
+        limited = False
         try:
             r = _redis()
             count = await r.incr(key)
             if count == 1:
                 await r.expire(key, self.window_seconds)
-            if int(count) > self.max_calls:
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Rate limit exceeded. Try again shortly.",
-                )
-            return
-        except redis.RedisError:
-            # Fail open into a process-local sliding window.
+            limited = int(count) > self.max_calls
+        except Exception:
+            # Fail open into a process-local sliding window so auth never
+            # breaks when Redis is unavailable (e.g. serverless runtimes).
             await self._check_memory(key)
+            return
+
+        if limited:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Rate limit exceeded. Try again shortly.",
+            )
 
     async def _check_memory(self, key: str) -> None:
         now = time.monotonic()
