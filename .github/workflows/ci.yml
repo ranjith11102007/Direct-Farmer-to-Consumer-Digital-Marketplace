@@ -46,13 +46,13 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest pytest-asyncio
 
       - name: Create database schema
         run: python -c "import asyncio; from app.database import init_db; asyncio.run(init_db())"
 
       - name: Run tests
-        run: pytest -q
+        run: python -m pytest -q
 
   frontend:
     name: Frontend checks
