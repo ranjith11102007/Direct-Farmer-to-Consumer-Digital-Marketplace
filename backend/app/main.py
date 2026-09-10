@@ -38,7 +38,10 @@ async def lifespan(app: FastAPI):
     try:
         await init_db()
     except Exception as exc:  # pragma: no cover - infra dependent
-        print(f"[startup] DB init skipped: {exc}")
+        import traceback
+
+        traceback.print_exc()
+        print(f"[startup] DB init skipped: {type(exc).__name__}: {exc}")
 
     await ping_database()
 
@@ -150,9 +153,14 @@ async def root() -> dict:
 # ---------- Global exception handlers ----------
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request, exc: Exception):
+    import traceback
+
+    traceback.print_exc()
+    body = {
+        "success": False,
+        "message": "Internal server error",
+        "code": "internal_error",
+    }
     if settings.DEBUG:
-        print(f"[error] {request.method} {request.url.path}: {exc!r}")
-    return JSONResponse(
-        status_code=500,
-        content={"success": False, "message": "Internal server error", "code": "internal_error"},
-    )
+        body["detail"] = f"{type(exc).__name__}: {exc}"
+    return JSONResponse(status_code=500, content=body)

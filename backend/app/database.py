@@ -15,6 +15,14 @@ from app.config import settings
 
 _IS_SQLITE = settings.DATABASE_URL.startswith("sqlite")
 
+scheme = settings.DATABASE_URL.split("://", 1)[0].split("+", 1)[-1]
+if scheme not in ("sqlite", "postgresql"):
+    raise ValueError(
+        "DATABASE_URL must use an async driver "
+        "(e.g. sqlite+aiosqlite:///... or postgresql+asyncpg://...). Got: "
+        f"{settings.DATABASE_URL.split('://', 1)[0]}"
+    )
+
 _engine_kwargs: dict = {
     "echo": settings.DATABASE_ECHO,
     "future": True,
