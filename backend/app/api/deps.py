@@ -1,5 +1,4 @@
 """Shared API dependencies: auth, roles, db, rate limiting."""
-from __future__ import annotations
 
 import uuid
 from typing import Annotated
