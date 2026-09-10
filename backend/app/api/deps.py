@@ -1,8 +1,9 @@
 """Shared API dependencies: auth, roles, db, rate limiting."""
 
 import asyncio
+import time
 import uuid
-
+from collections import defaultdict, deque
 from typing import Annotated
 
 import redis.asyncio as redis
@@ -21,6 +22,9 @@ SessionDep = Annotated[AsyncSession, Depends(get_db)]
 
 _redis_client: redis.Redis | None = None
 _redis_loop: asyncio.AbstractEventLoop | None = None
+
+_memory_rl: dict[str, deque[float]] = defaultdict(deque)
+_memory_rl_lock = asyncio.Lock()
 
 
 def _redis() -> redis.Redis:
@@ -128,7 +132,9 @@ require_bulk_buyer = Depends(
 
 
 class RateLimiter:
-    """Sliding-window in-memory + Redis backed rate limiter."""
+    """Sliding-window rate limiter backed by Redis, with an in-memory
+    fallback so auth never fails when Redis is unavailable (e.g. serverless
+    runtimes such as Vercel)."""
 
     def __init__(self, max_calls: int, window_seconds: int = 60) -> None:
         self.max_calls = max_calls
@@ -149,11 +155,23 @@ class RateLimiter:
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail="Rate limit exceeded. Try again shortly.",
                 )
+            return
         except redis.RedisError:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Rate limiter unavailable.",
-            )
+            # Fail open into a process-local sliding window.
+            await self._check_memory(key)
+
+    async def _check_memory(self, key: str) -> None:
+        now = time.monotonic()
+        async with _memory_rl_lock:
+            stamps = _memory_rl[key]
+            while stamps and now - stamps[0] > self.window_seconds:
+                stamps.popleft()
+            if len(stamps) >= self.max_calls:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Rate limit exceeded. Try again shortly.",
+                )
+            stamps.append(now)
 
 
 RateLimitAuth = Depends(RateLimiter(max_calls=settings.RATE_LIMIT_AUTH_PER_MINUTE))

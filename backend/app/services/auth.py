@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -32,6 +33,11 @@ from app.utils.validators import (
 redis_client: redis.Redis | None = None
 _redis_loop: asyncio.AbstractEventLoop | None = None
 
+# In-memory OTP fallback used when Redis is unreachable (e.g. serverless).
+_otp_memory: dict[str, str] = {}
+_otp_memory_expiry: dict[str, float] = {}
+_otp_attempt_memory: dict[str, int] = {}
+
 
 def _get_redis() -> redis.Redis:
     global redis_client, _redis_loop
@@ -54,12 +60,53 @@ async def _otp_attempt_key(phone: str) -> str:
 
 
 async def _store_otp(phone: str, otp: str, hashed: str) -> None:
-    r = _get_redis()
-    await r.set(
-        await _otp_key(phone),
-        hashed,
-        ex=settings.OTP_EXPIRE_SECONDS,
-    )
+    key = await _otp_key(phone)
+    try:
+        r = _get_redis()
+        await r.set(key, hashed, ex=settings.OTP_EXPIRE_SECONDS)
+    except redis.RedisError:
+        _otp_memory[key] = hashed
+        _otp_memory_expiry[key] = time.time() + settings.OTP_EXPIRE_SECONDS
+
+
+async def _otp_get(key: str) -> str | None:
+    """Fetch a value from Redis, falling back to the in-memory store."""
+    try:
+        r = _get_redis()
+        return await r.get(key)
+    except redis.RedisError:
+        value = _otp_memory.get(key)
+        if value is None:
+            return None
+        if _otp_memory_expiry.get(key, 0) < time.time():
+            _otp_memory.pop(key, None)
+            _otp_memory_expiry.pop(key, None)
+            _otp_attempt_memory.pop(key, None)
+            return None
+        return value
+
+
+async def _otp_increment(key: str) -> int:
+    """Increment a counter, falling back to the in-memory store."""
+    try:
+        r = _get_redis()
+        return int(await r.incr(key))
+    except redis.RedisError:
+        _otp_attempt_memory[key] = _otp_attempt_memory.get(key, 0) + 1
+        return _otp_attempt_memory[key]
+
+
+async def _otp_delete(*keys: str) -> None:
+    try:
+        r = _get_redis()
+        if keys:
+            await r.delete(*keys)
+    except redis.RedisError:
+        pass
+    for key in keys:
+        _otp_memory.pop(key, None)
+        _otp_memory_expiry.pop(key, None)
+        _otp_attempt_memory.pop(key, None)
 
 
 class AuthService:
@@ -139,7 +186,7 @@ class AuthService:
         otp = generate_otp()
         hashed = hashlib.sha256(otp.encode()).hexdigest()
         await _store_otp(normalized_phone, otp, hashed)
-        await _get_redis().delete(await _otp_attempt_key(normalized_phone))
+        await _otp_delete(await _otp_attempt_key(normalized_phone))
 
         # In production this hooks into SMS/WhatsApp providers.
         from app.services.notification import NotificationService
@@ -174,23 +221,21 @@ class AuthService:
         except ValidationError as exc:
             return {}, exc
 
-        r = _get_redis()
         attempt_key = await _otp_attempt_key(normalized_phone)
-        attempts = int(await r.get(attempt_key) or "0")
+        attempts = int(await _otp_get(attempt_key) or "0")
         if attempts >= settings.OTP_MAX_ATTEMPTS:
             return {}, ValidationError("Too many OTP attempts. Please request a new OTP.")
 
-        stored_hash = await r.get(await _otp_key(normalized_phone))
+        stored_hash = await _otp_get(await _otp_key(normalized_phone))
         if not stored_hash:
             return {}, ValidationError("OTP expired or not requested.")
 
         supplied_hash = hashlib.sha256(str(otp).strip().encode()).hexdigest()
         if supplied_hash != stored_hash:
-            await r.incr(attempt_key)
+            await _otp_increment(attempt_key)
             return {}, ValidationError("Incorrect OTP.")
 
-        await r.delete(await _otp_key(normalized_phone))
-        await r.delete(attempt_key)
+        await _otp_delete(await _otp_key(normalized_phone), attempt_key)
 
         user = (await db.execute(
             select(User).where(User.phone == normalized_phone)
