@@ -1,6 +1,7 @@
 """Authentication service: register, OTP, login, refresh, logout."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import uuid
@@ -29,12 +30,18 @@ from app.utils.validators import (
 )
 
 redis_client: redis.Redis | None = None
+_redis_loop: asyncio.AbstractEventLoop | None = None
 
 
 def _get_redis() -> redis.Redis:
-    global redis_client
-    if redis_client is None:
+    global redis_client, _redis_loop
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if redis_client is None or _redis_loop is not loop:
         redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        _redis_loop = loop
     return redis_client
 
 

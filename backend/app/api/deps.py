@@ -1,6 +1,8 @@
 """Shared API dependencies: auth, roles, db, rate limiting."""
 
+import asyncio
 import uuid
+
 from typing import Annotated
 
 import redis.asyncio as redis
@@ -18,12 +20,18 @@ bearer_scheme = HTTPBearer(auto_error=False)
 SessionDep = Annotated[AsyncSession, Depends(get_db)]
 
 _redis_client: redis.Redis | None = None
+_redis_loop: asyncio.AbstractEventLoop | None = None
 
 
 def _redis() -> redis.Redis:
-    global _redis_client
-    if _redis_client is None:
+    global _redis_client, _redis_loop
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if _redis_client is None or _redis_loop is not loop:
         _redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        _redis_loop = loop
     return _redis_client
 
 
