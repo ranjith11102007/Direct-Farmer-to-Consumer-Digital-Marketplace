@@ -13,47 +13,56 @@ import {
   Truck,
   ShieldCheck,
   Star,
+  Bell,
+  User,
 } from 'lucide-react';
 import { PromoStrip } from '@/components/layout/promo-strip';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { MobileNav } from '@/components/layout/mobile-nav';
+import { RoleGuard } from '@/components/auth/role-guard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { DemandChart } from '@/components/ai/demand-chart';
 import { ForecastCard } from '@/components/ai/forecast-card';
 import { useProducerProfile, useForecasts } from '@/hooks/useApi';
-import { useUIStore } from '@/store';
+import { useUIStore, useAuthStore, useOrdersStore, useNotificationsStore } from '@/store';
 import { t } from '@/i18n';
 import { cn, formatCurrency } from '@/lib/utils';
 
 const NAV_ITEMS = [
   { href: '/producer/dashboard', labelKey: 'producer.dashboard', icon: LayoutDashboard },
   { href: '/producer/products', labelKey: 'producer.products', icon: Package },
-  { href: '/producer/orders', labelKey: 'producer.orders', icon: ShoppingCart },
+  { href: '/producer/orders', labelKey: 'producer.incomingOrders', icon: Bell },
   { href: '/producer/forecasts', labelKey: 'producer.forecasts', icon: BrainCircuit },
   { href: '/producer/settlements', labelKey: 'producer.settlements', icon: Wallet },
 ];
 
 export default function ProducerDashboardPage() {
   const language = useUIStore((state) => state.language);
+  const user = useAuthStore((state) => state.user);
   const { data: profile, isLoading } = useProducerProfile();
   const { data: forecasts } = useForecasts({ scope: 'producer', limit: 3 });
 
+  const farmerOrders = useOrdersStore((s) => user ? s.getOrdersByFarmer(user.id) : []);
+  const pendingOrders = farmerOrders.filter((o) => o.orderStatus === 'pending').length;
+
+  const unreadCount = useNotificationsStore((s) => user ? s.getUnreadCount(user.id) : 0);
+
   return (
-    <>
+    <RoleGuard roles={['farmer', 'fpo', 'fpo_admin', 'admin']} redirectTo="/delivery/dashboard">
       <PromoStrip />
       <Header />
       <main className="mx-auto max-w-7xl px-4 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-primary-500 to-primary-700 text-lg font-bold text-white">
-              {profile ? profile.farmName.charAt(0) : 'F'}
+              {profile ? profile.farmName.charAt(0) : user?.name?.[0] ?? 'F'}
             </span>
             <div>
               <h1 className="text-xl font-bold text-charcoal-800">
-                {t('producer.welcome', language).replace('{{name}}', profile?.farmName ?? '')}
+                {t('producer.welcome', language).replace('{{name}}', profile?.farmName ?? user?.name ?? '')}
               </h1>
               <p className="flex items-center gap-1 text-sm text-charcoal-500">
                 {profile ? `${profile.village}, ${profile.district}` : ''}
@@ -66,6 +75,16 @@ export default function ProducerDashboardPage() {
             </div>
           </div>
           <div className="flex gap-2">
+            {pendingOrders > 0 && (
+              <Badge variant="danger" icon={<Bell className="h-3 w-3" />}>
+                {pendingOrders} new order{pendingOrders > 1 ? 's' : ''}
+              </Badge>
+            )}
+            {unreadCount > 0 && (
+              <Badge variant="warning" icon={<Bell className="h-3 w-3" />}>
+                {unreadCount} notification{unreadCount > 1 ? 's' : ''}
+              </Badge>
+            )}
             {profile?.settlementsEnabled && (
               <Badge variant="success" icon={<ShieldCheck className="h-3 w-3" />}>
                 {t('producer.settlementsEnabled', language)}
@@ -91,7 +110,9 @@ export default function ProducerDashboardPage() {
               >
                 <div className="flex items-center gap-2">
                   <Icon className="h-4 w-4 text-primary-600" />
-                  <span className="text-xs font-semibold text-charcoal-700">{t(labelKey, language)}</span>
+                  <span className="text-xs font-semibold text-charcoal-700">
+                    {labelKey === 'producer.incomingOrders' ? t('producer.incomingOrders', language) : t(labelKey, language)}
+                  </span>
                 </div>
                 <ChevronRight className="h-3.5 w-3.5 text-charcoal-300" />
               </Card>
@@ -165,7 +186,7 @@ export default function ProducerDashboardPage() {
       </main>
       <Footer />
       <MobileNav />
-    </>
+    </RoleGuard>
   );
 }
 

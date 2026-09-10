@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, LayoutGrid, TrendingUp, Wallet, Link2, ClipboardList, Users, BarChart3, Truck } from 'lucide-react';
+import { Home, LayoutGrid, TrendingUp, Wallet, Link2, ClipboardList, Users, BarChart3, Truck, ShoppingCart, Bell, Plus, MapPin, Settings, User, Package } from 'lucide-react';
 import { t } from '@/i18n';
 import { useUIStore } from '@/store';
 import { cn } from '@/lib/utils';
@@ -27,7 +27,7 @@ export function Sidebar({ items, title, footer, className }: SidebarProps) {
       <nav className="flex flex-col gap-0.5 p-2" aria-label={title}>
         {items.map(({ key, href, icon: Icon }) => (
           <SidebarLink key={key} href={href} icon={<Icon className="h-4 w-4" />} active={false}>
-            {t(`nav.${key}`, language)}
+            {key === 'home' ? t('nav.home', language) : t(`nav.${key}`, language) !== `nav.${key}` ? t(`nav.${key}`, language) : key}
           </SidebarLink>
         ))}
       </nav>
@@ -68,17 +68,31 @@ export function SidebarLink({
 }
 
 export const NAV_GROUPS = {
-  consumer: [{ key: 'home', href: '/', icon: Home }],
-  marketplace: [{ key: 'marketplace', href: '/marketplace', icon: LayoutGrid }],
-  producer: [
+  consumer: [
+    { key: 'home', href: '/', icon: Home },
+    { key: 'marketplace', href: '/marketplace', icon: LayoutGrid },
+    { key: 'cart', href: '/cart', icon: ShoppingCart },
+    { key: 'myOrders', href: '/orders', icon: Package },
+    { key: 'addresses', href: '/account/addresses', icon: MapPin },
+    { key: 'settings', href: '/account/settings', icon: Settings },
+  ],
+  farmer: [
     { key: 'home', href: '/producer/dashboard', icon: Home },
     { key: 'products', href: '/producer/products', icon: ClipboardList },
-    { key: 'orders', href: '/producer/orders', icon: Link2 },
+    { key: 'addProduct', href: '/producer/products?new=1', icon: Plus },
+    { key: 'incomingOrders', href: '/producer/orders', icon: Bell },
     { key: 'forecasts', href: '/producer/forecasts', icon: TrendingUp },
     { key: 'settlements', href: '/producer/settlements', icon: Wallet },
+    { key: 'profile', href: '/producer/profile', icon: User },
+    { key: 'settings', href: '/producer/settings', icon: Settings },
   ],
-  bulk: [{ key: 'bulk', href: '/bulk', icon: BarChart3 }],
-  delivery: [{ key: 'dashboard', href: '/delivery/dashboard', icon: Truck }],
+  delivery: [
+    { key: 'home', href: '/delivery/dashboard', icon: Home },
+    { key: 'deliveries', href: '/delivery/dashboard', icon: Truck },
+    { key: 'notifications', href: '/delivery/dashboard', icon: Bell },
+    { key: 'profile', href: '/account', icon: User },
+    { key: 'settings', href: '/account/settings', icon: Settings },
+  ],
   admin: [
     { key: 'dashboard', href: '/admin/dashboard', icon: Home },
     { key: 'users', href: '/admin/users', icon: Users },
@@ -87,5 +101,10 @@ export const NAV_GROUPS = {
     { key: 'analytics', href: '/admin/analytics', icon: BarChart3 },
     { key: 'settlements', href: '/admin/settlements', icon: Wallet },
     { key: 'forecasts', href: '/admin/forecasts', icon: TrendingUp },
+  ],
+  bulk: [
+    { key: 'home', href: '/bulk', icon: Home },
+    { key: 'requirements', href: '/bulk/requirements', icon: ClipboardList },
+    { key: 'settings', href: '/account/settings', icon: Settings },
   ],
 } as const;

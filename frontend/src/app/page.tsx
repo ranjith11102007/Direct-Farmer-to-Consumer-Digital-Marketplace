@@ -14,6 +14,7 @@ import { BulkBuyerSection } from '@/components/marketplace/bulk-buyer-section';
 import { AIInsights } from '@/components/marketplace/ai-insights';
 import { LogisticsSection } from '@/components/marketplace/logistics-section';
 import { Testimonials } from '@/components/marketplace/testimonials';
+import { LandingRedirect } from '@/components/auth/landing-redirect';
 
 export default function HomePage() {
   return (
@@ -21,6 +22,7 @@ export default function HomePage() {
       <PromoStrip />
       <Header />
       <CategoryNav />
+      <LandingRedirect />
       <main>
         <HeroSection />
         <TrustIndicators />

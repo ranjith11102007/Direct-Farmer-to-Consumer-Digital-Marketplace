@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PromoStrip } from '@/components/layout/promo-strip';
 import { Header } from '@/components/layout/header';
@@ -11,8 +11,9 @@ import { ProductGrid } from '@/components/marketplace/product-grid';
 import { PageLoader } from '@/components/ui/loading';
 import { useProducts } from '@/hooks/useApi';
 import { t } from '@/i18n';
-import { useUIStore } from '@/store';
+import { useUIStore, useMarketplaceStore } from '@/store';
 import type { ProductFilters } from '@/components/marketplace/filter-panel';
+import type { Product } from '@/types';
 
 function MarketplaceContent() {
   const searchParams = useSearchParams();
@@ -37,6 +38,21 @@ function MarketplaceContent() {
     grades: activeFilters.grades?.join(','),
     harvest_within_days: activeFilters.harvestWithinDays,
   });
+
+  // Merge API products with locally-added farmer products
+  const localProducts = useMarketplaceStore((s) => s.getAllActiveProducts());
+
+  const allProducts = useMemo(() => {
+    const apiProducts = data?.items ?? [];
+    const apiIds = new Set(apiProducts.map((p) => p.id));
+    const merged = [...apiProducts];
+    for (const lp of localProducts) {
+      if (!apiIds.has(lp.id)) {
+        merged.push(lp as unknown as Product);
+      }
+    }
+    return merged;
+  }, [data?.items, localProducts]);
 
   const handleFiltersChange = (filters: ProductFilters & { query?: string }) => {
     setActiveFilters(filters);
@@ -63,11 +79,11 @@ function MarketplaceContent() {
         </div>
 
         <ProductGrid
-          products={data?.items ?? []}
+          products={allProducts}
           isLoading={isLoading}
           isError={isError}
           onRetry={() => refetch()}
-          total={data?.total}
+          total={allProducts.length}
           page={page}
           totalPages={data?.totalPages ?? 1}
           onPageChange={setPage}

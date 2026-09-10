@@ -13,7 +13,7 @@ import type { Product, ProductCategory } from '@/types';
 
 export interface InventoryFormProps {
   initialData?: Partial<Product>;
-  onSubmit?: (data: Partial<Product>) => Promise<void> | void;
+  onSubmit?: (data: Record<string, unknown>) => Promise<void> | void;
 }
 
 const CATEGORY_OPTIONS = [
@@ -61,9 +61,15 @@ export function InventoryForm({ initialData, onSubmit }: InventoryFormProps) {
       toast.error(t('validation.invalidQuantity', language));
       return;
     }
+    if (form.availableQuantity <= 0) {
+      toast.error(t('validation.invalidQuantity', language));
+      return;
+    }
     setSubmitting(true);
     try {
-      await onSubmit?.(form);
+      await onSubmit?.(form as unknown as Record<string, unknown>);
+    } catch (err) {
+      toast.error('Failed to save product. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -76,6 +82,7 @@ export function InventoryForm({ initialData, onSubmit }: InventoryFormProps) {
           label={t('producer.productName', language)}
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
+          required
         />
         <Input
           label={t('producer.productNameTa', language)}
@@ -106,6 +113,7 @@ export function InventoryForm({ initialData, onSubmit }: InventoryFormProps) {
           value={form.currentPricePerUnit || ''}
           onChange={(e) => setForm({ ...form, currentPricePerUnit: Number(e.target.value) })}
           icon={<Package className="h-4 w-4" />}
+          required
         />
         <Input
           label={t('producer.quantity', language)}
@@ -114,6 +122,7 @@ export function InventoryForm({ initialData, onSubmit }: InventoryFormProps) {
           step="0.5"
           value={form.availableQuantity || ''}
           onChange={(e) => setForm({ ...form, availableQuantity: Number(e.target.value) })}
+          required
         />
       </div>
 

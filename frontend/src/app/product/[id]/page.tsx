@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Leaf,
   MapPin,
@@ -31,7 +31,7 @@ import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { PageLoader } from '@/components/ui/loading';
 import { TraceabilityTimeline } from '@/components/marketplace/traceability-timeline';
 import { useProduct } from '@/hooks/useApi';
-import { useCartStore, useUIStore } from '@/store';
+import { useCartStore, useUIStore, useMarketplaceStore } from '@/store';
 import { t } from '@/i18n';
 import { cn, formatCurrency, formatDate, getInitials } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -52,6 +52,7 @@ const MOCK_TRACE_ONE = [
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const productId = params.id;
   const language = useUIStore((state) => state.language);
   const addItem = useCartStore((state) => state.addItem);
@@ -59,9 +60,10 @@ export default function ProductDetailPage() {
   const [wishlisted, setWishlisted] = useState(false);
   const [activeTab, setActiveTab] = useState<'details' | 'traceability' | 'reviews'>('details');
 
-  const { data, isLoading, isError } = useProduct(productId);
+  const { data, isLoading, isError } = useProduct(productId.startsWith('local-') ? '' : productId);
+  const localProduct = useMarketplaceStore((s) => s.farmerProducts.find((p) => p.id === productId));
 
-  if (isLoading) {
+  if (isLoading && !productId.startsWith('local-')) {
     return (
       <>
         <PromoStrip />
@@ -76,7 +78,28 @@ export default function ProductDetailPage() {
     );
   }
 
-  const product = data?.product ?? {
+  const product: Product = data?.product ?? (localProduct ? {
+    ...localProduct,
+    nameTa: '',
+    basePricePerUnit: localProduct.currentPricePerUnit,
+    minOrderQuantity: 1,
+    grade: localProduct.grade ?? 'A',
+    isOrganicCertified: localProduct.isOrganic ?? false,
+    organicCertified: localProduct.isOrganic ?? false,
+    totalRatings: 0,
+    producer: { id: localProduct.farmerId, name: localProduct.farmerName, entityType: 'farmer' as const },
+    harvestDate: localProduct.createdAt,
+    deliveryEstimateMins: 240,
+    packagingType: 'loose',
+    shelfLifeDays: 5,
+    certifications: [],
+    tags: [],
+    updatedAt: localProduct.createdAt,
+    categoryId: '',
+    fpoId: undefined,
+    descriptionTa: undefined,
+    unitTa: undefined,
+  } : {
     id: productId,
     name: 'Farm Fresh Tomato',
     nameTa: 'பண்ணை புதிய தக்காளி',
@@ -102,7 +125,7 @@ export default function ProductDetailPage() {
     certifications: ['GAP Certified'],
     tags: ['hybrid', 'pest-managed'],
     createdAt: new Date().toISOString(),
-  } as unknown as Product;
+  }) as unknown as Product;
 
   const handleAddToCart = () => {
     addItem({
@@ -272,6 +295,12 @@ export default function ProductDetailPage() {
               <Button size="lg" fullWidth onClick={handleAddToCart} disabled={product.stockStatus === 'out_of_stock'}>
                 <ShoppingCart className="h-5 w-5" />
                 {t('products.addToCart', language)}
+              </Button>
+              <Button size="lg" variant="outline" onClick={() => {
+                handleAddToCart();
+                router.push('/checkout');
+              }} disabled={product.stockStatus === 'out_of_stock'}>
+                Buy Now
               </Button>
             </div>
           </div>

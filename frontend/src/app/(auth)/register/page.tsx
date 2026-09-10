@@ -12,7 +12,7 @@ import {
   Truck,
   ArrowRight,
   Check,
-  Smartphone,
+  Mail,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ import { PageLoader } from '@/components/ui/loading';
 import { useAuth } from '@/hooks/useAuth';
 import { useUIStore } from '@/store';
 import { t } from '@/i18n';
+import { getErrorMessage } from '@/lib/api';
 import { cn, isValidPhone } from '@/lib/utils';
 import type { UserRole } from '@/types';
 
@@ -41,24 +42,13 @@ function RegisterContent() {
 
   const [role, setRole] = useState<UserRole>(initialRole);
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const validRole = ROLES.find((r) => r.role === role);
-
-  const handleSendOtp = () => {
-    setError(null);
-    if (!isValidPhone(phone)) {
-      setError(t('auth.phoneError', language));
-      return;
-    }
-    setOtpSent(true);
-  };
 
   const handleRegister = async () => {
     setError(null);
@@ -66,16 +56,38 @@ function RegisterContent() {
       setError(t('validation.required', language).replace('{{field}}', t('auth.firstName', language)));
       return;
     }
-    if (!isValidPhone(phone)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError(t('validation.invalidEmail', language));
+      return;
+    }
+    if (!password || password.length < 8) {
+      setError(t('auth.passwordHint', language));
+      return;
+    }
+    if (phone && !isValidPhone(phone)) {
       setError(t('auth.phoneError', language));
       return;
     }
     setLoading(true);
     try {
-      await register({ name, phoneNumber: phone, role, email: email || undefined, password: password || undefined });
-      router.push(role === 'farmer' || role === 'fpo' ? '/producer/dashboard' : '/');
-    } catch {
-      setError(t('error.somethingWentWrong', language));
+      await register({
+        name,
+        email,
+        phoneNumber: phone || undefined,
+        password,
+        role,
+      });
+      const dashboards: Partial<Record<UserRole, string>> = {
+        consumer: '/',
+        farmer: '/producer/dashboard',
+        fpo: '/producer/dashboard',
+        delivery_partner: '/delivery/dashboard',
+        bulk_buyer: '/bulk',
+        admin: '/admin/dashboard',
+      };
+      router.push(dashboards[role] ?? '/');
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -128,47 +140,33 @@ function RegisterContent() {
               placeholder={validRole?.role === 'farmer' ? 'Ex. Kasirajan Murugan' : 'Your full name'}
             />
             <Input
-              label={t('auth.phone', language)}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              placeholder={t('auth.phonePlaceholder', language)}
-              inputMode="numeric"
-              icon={<Smartphone className="h-4 w-4" />}
+              label={t('auth.email', language)}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              icon={<Mail className="h-4 w-4" />}
             />
-
-            {!otpSent ? (
-              <Button size="lg" fullWidth variant="outline" onClick={handleSendOtp}>
-                {t('auth.sendOtp', language)}
-              </Button>
-            ) : (
-              <Input
-                label={t('auth.enterOtp', language)}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                inputMode="numeric"
-                placeholder="••••••"
-              />
-            )}
+            <Input
+              label={t('auth.password', language)}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              hint={t('auth.passwordHint', language)}
+            />
 
             <details className="group">
               <summary className="cursor-pointer text-xs font-medium text-charcoal-500 hover:text-primary-700">
-                {t('auth.or', language)} + {t('auth.loginWithEmail', language)}
+                {t('auth.or', language)} + {t('auth.phone', language)} (optional)
               </summary>
-              <div className="mt-3 space-y-3">
+              <div className="mt-3">
                 <Input
-                  label={t('auth.email', language)}
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                />
-                <Input
-                  label={t('auth.password', language)}
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  hint={t('auth.passwordHint', language)}
+                  label={t('auth.phone', language)}
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  placeholder={t('auth.phonePlaceholder', language)}
+                  inputMode="numeric"
                 />
               </div>
             </details>
@@ -176,6 +174,26 @@ function RegisterContent() {
             <Button size="lg" fullWidth loading={loading} onClick={handleRegister}>
               {t('auth.createFreeAccount', language)}
               <ArrowRight className="h-4 w-4" />
+            </Button>
+
+            <div className="flex items-center gap-3 py-1">
+              <span className="h-px flex-1 bg-charcoal-100" />
+              <span className="text-xs text-charcoal-400">{t('auth.or', language)}</span>
+              <span className="h-px flex-1 bg-charcoal-100" />
+            </div>
+            <Button
+              size="lg"
+              fullWidth
+              variant="outline"
+              onClick={() => router.push('/login')}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.49 12c0-.73.13-1.44.35-2.1V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.16-3.16A10.97 10.97 0 0 0 12 2 11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+              </svg>
+              {t('auth.continueWithGoogle', language)}
             </Button>
           </div>
 

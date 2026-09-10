@@ -12,9 +12,9 @@ import {
 } from 'lucide-react';
 import { PromoStrip } from '@/components/layout/promo-strip';
 import { Header } from '@/components/layout/header';
-import { CategoryNav } from '@/components/layout/category-nav';
 import { Footer } from '@/components/layout/footer';
 import { MobileNav } from '@/components/layout/mobile-nav';
+import { RoleGuard } from '@/components/auth/role-guard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -113,7 +113,7 @@ export default function DeliveryDashboardPage() {
     <>
       <PromoStrip />
       <Header />
-      <CategoryNav />
+      <RoleGuard roles={['delivery_partner', 'admin']} redirectTo="/producer/dashboard">
       <main className="mx-auto max-w-7xl px-4 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -210,6 +210,7 @@ export default function DeliveryDashboardPage() {
         </Button>
       </Modal>
 
+      </RoleGuard>
       <Footer />
       <MobileNav />
     </>

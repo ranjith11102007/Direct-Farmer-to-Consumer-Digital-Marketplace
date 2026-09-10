@@ -7,6 +7,33 @@ import { apiPost, apiPatch, getErrorMessage } from '@/lib/api';
 import { toast } from 'sonner';
 import type { User, UserRole, AuthResponse } from '@/types';
 
+type BackendUser = Record<string, unknown> & { role?: string };
+
+function normalizeUser(raw: BackendUser | undefined): User {
+  return {
+    id: String(raw?.id ?? ''),
+    name: (raw?.full_name as string) ?? (raw?.name as string) ?? '',
+    phoneNumber: (raw?.phone as string) ?? '',
+    email: raw?.email as string | undefined,
+    role: (raw?.role as UserRole) ?? ('consumer' as UserRole),
+    status: raw?.is_verified ? 'verified' : 'active',
+    language: 'ta',
+    prefersDarkMode: false,
+    photoUrl: (raw?.avatar_url as string) ?? undefined,
+    registeredAt: (raw?.created_at as string) ?? new Date().toISOString(),
+    emailVerified: Boolean(raw?.is_verified),
+  };
+}
+
+function parseAuthResponse(envelope: unknown): AuthResponse {
+  const data = (envelope as { data?: Record<string, unknown> })?.data ?? (envelope as Record<string, unknown>);
+  return {
+    accessToken: (data.access_token as string) ?? (data.accessToken as string) ?? '',
+    refreshToken: (data.refresh_token as string) ?? (data.refreshToken as string) ?? '',
+    user: normalizeUser(data.user as BackendUser | undefined),
+  };
+}
+
 export function useAuth() {
   const router = useRouter();
   const {
@@ -23,9 +50,10 @@ export function useAuth() {
     async (payload: { phoneNumber: string; otp?: string; email?: string; password?: string }) => {
       try {
         const res = await apiPost<AuthResponse>('/auth/login', payload);
-        setAuth(res.user, res.accessToken, res.refreshToken);
+        const parsed = parseAuthResponse(res);
+        setAuth(parsed.user, parsed.accessToken, parsed.refreshToken);
         toast.success('Welcome back!');
-        return res;
+        return parsed;
       } catch (error) {
         toast.error(getErrorMessage(error));
         throw error;
@@ -36,7 +64,7 @@ export function useAuth() {
 
   const requestOtp = useCallback(async (phoneNumber: string) => {
     try {
-      await apiPost<{ otpSent: boolean }>('/auth/otp/request', { phoneNumber });
+      await apiPost<{ otpSent: boolean }>('/auth/send-otp', { phone: phoneNumber });
       toast.success('OTP sent to your phone');
       return true;
     } catch (error) {
@@ -47,10 +75,11 @@ export function useAuth() {
 
   const verifyOtp = useCallback(async (phoneNumber: string, otp: string) => {
     try {
-      const res = await apiPost<AuthResponse>('/auth/otp/verify', { phoneNumber, otp });
-      setAuth(res.user, res.accessToken, res.refreshToken);
+      const res = await apiPost<AuthResponse>('/auth/verify-otp', { phone: phoneNumber, otp });
+      const parsed = parseAuthResponse(res);
+      setAuth(parsed.user, parsed.accessToken, parsed.refreshToken);
       toast.success('Phone verified successfully');
-      return res;
+      return parsed;
     } catch (error) {
       toast.error(getErrorMessage(error));
       throw error;
@@ -60,10 +89,11 @@ export function useAuth() {
   const loginWithEmail = useCallback(
     async (email: string, password: string) => {
       try {
-        const res = await apiPost<AuthResponse>('/auth/login', { email, password });
-        setAuth(res.user, res.accessToken, res.refreshToken);
+        const res = await apiPost<AuthResponse>('/auth/login', { identifier: email, password });
+        const parsed = parseAuthResponse(res);
+        setAuth(parsed.user, parsed.accessToken, parsed.refreshToken);
         toast.success('Welcome back!');
-        return res;
+        return parsed;
       } catch (error) {
         toast.error(getErrorMessage(error));
         throw error;
@@ -75,10 +105,18 @@ export function useAuth() {
   const register = useCallback(
     async (payload: Partial<User> & { role: UserRole; password?: string; otp?: string }) => {
       try {
-        const res = await apiPost<AuthResponse>('/auth/register', payload);
-        setAuth(res.user, res.accessToken, res.refreshToken);
+        const body = {
+          full_name: payload.name?.trim() ?? '',
+          phone: payload.phoneNumber?.trim() || null,
+          email: payload.email || null,
+          password: payload.password,
+          role: payload.role,
+        };
+        const res = await apiPost<AuthResponse>('/auth/register', body);
+        const parsed = parseAuthResponse(res);
+        setAuth(parsed.user, parsed.accessToken, parsed.refreshToken);
         toast.success('Account created successfully!');
-        return res;
+        return parsed;
       } catch (error) {
         toast.error(getErrorMessage(error));
         throw error;
@@ -89,16 +127,22 @@ export function useAuth() {
 
   const logout = useCallback(() => {
     try {
-      const refresh = useAuthStore.getState().refreshToken;
-      if (refresh) {
-        apiPost('/auth/logout', { refreshToken: refresh }).catch(() => undefined);
+      const access = useAuthStore.getState().token;
+      if (access) {
+        apiPost('/auth/logout', { access_token: access }).catch(() => undefined);
       }
     } catch {
       // ignore
     }
     clearAuth();
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('vaikkal-auth');
+      window.localStorage.removeItem('vaikkal-cart');
+      window.sessionStorage.clear();
+      window.history.replaceState(null, '', '/login');
+    }
     toast.success('Logged out successfully');
-    router.push('/');
+    router.push('/login');
   }, [clearAuth, router]);
 
   const updateProfile = useCallback(

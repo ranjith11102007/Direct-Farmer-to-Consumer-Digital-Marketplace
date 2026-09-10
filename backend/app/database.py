@@ -67,6 +67,62 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    if settings.DATABASE_URL.startswith("sqlite"):
+        await _migrate_sqlite_users_phone_nullable()
+
+
+async def _migrate_sqlite_users_phone_nullable() -> None:
+    """Make users.phone nullable on older SQLite databases (idempotent)."""
+    from sqlalchemy import text
+
+    async with engine.connect() as conn:
+        cols = (await conn.execute(text("PRAGMA table_info(users)"))).fetchall()
+    if not cols:
+        return
+
+    phone_not_null = any(c[1] == "phone" and c[3] == 1 for c in cols)
+    if not phone_not_null:
+        return
+
+    create_ddl = (
+        "CREATE TABLE users_new ("
+        "id VARCHAR(32) NOT NULL, "
+        "created_at DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP), "
+        "updated_at DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP), "
+        "email VARCHAR(255), "
+        "phone VARCHAR(20), "
+        "password_hash VARCHAR(255) NOT NULL, "
+        "full_name VARCHAR(255) NOT NULL, "
+        "role VARCHAR(32) NOT NULL DEFAULT 'consumer', "
+        "is_verified BOOLEAN NOT NULL DEFAULT 0, "
+        "is_active BOOLEAN NOT NULL DEFAULT 1, "
+        "preferred_language VARCHAR(10) NOT NULL DEFAULT 'ta', "
+        "avatar_url TEXT, "
+        "verification_status VARCHAR(32) NOT NULL DEFAULT 'draft', "
+        "PRIMARY KEY (id)"
+        ")"
+    )
+    async with engine.begin() as conn:
+        await conn.execute(text(create_ddl))
+        await conn.execute(
+            text(
+                "INSERT INTO users_new (id, created_at, updated_at, email, phone, "
+                "password_hash, full_name, role, is_verified, is_active, "
+                "preferred_language, avatar_url, verification_status) "
+                "SELECT id, created_at, updated_at, email, phone, password_hash, "
+                "full_name, role, is_verified, is_active, preferred_language, "
+                "avatar_url, verification_status FROM users"
+            )
+        )
+        await conn.execute(text("DROP TABLE users"))
+        await conn.execute(text("ALTER TABLE users_new RENAME TO users"))
+        await conn.execute(
+            text("CREATE UNIQUE INDEX ix_users_email ON users (email)")
+        )
+        await conn.execute(
+            text("CREATE UNIQUE INDEX ix_users_phone ON users (phone)")
+        )
+
 
 async def ping_database() -> bool:
     """Check whether the database is reachable."""

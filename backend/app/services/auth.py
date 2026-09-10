@@ -70,7 +70,7 @@ class AuthService:
         db: AsyncSession,
         *,
         email: str,
-        phone: str,
+        phone: str | None,
         password: str,
         full_name: str,
         role: UserRole = UserRole.CONSUMER,
@@ -78,17 +78,25 @@ class AuthService:
     ) -> tuple[dict[str, Any], Exception | None]:
         try:
             normalized_email = validate_email(email) if email else None
-            normalized_phone = validate_phone(phone)
+            normalized_phone = validate_phone(phone) if phone else None
             validate_password_strength(password)
         except ValidationError as exc:
             return {}, exc
 
-        match_clauses: list[Any] = [User.phone == normalized_phone]
+        if normalized_email is None and normalized_phone is None:
+            return {}, ValidationError("Provide a valid email or phone number.")
+
+        match_clauses: list[Any] = []
+        if normalized_phone:
+            match_clauses.append(User.phone == normalized_phone)
         if normalized_email:
             match_clauses.append(User.email == normalized_email)
-        existing = (await db.execute(
-            select(User).where(or_(*match_clauses))
-        )).scalar_one_or_none()
+        if match_clauses:
+            existing = (await db.execute(
+                select(User).where(or_(*match_clauses))
+            )).scalar_one_or_none()
+        else:
+            existing = None
         if existing:
             return {}, ValidationError("An account with this email or phone already exists.")
 
@@ -99,9 +107,11 @@ class AuthService:
             full_name=full_name.strip(),
             role=role,
             preferred_language=preferred_language,
-            is_verified=False,
+            is_verified=bool(normalized_email),
             is_active=True,
-            verification_status=VerificationStatus.DRAFT,
+            verification_status=VerificationStatus.VERIFIED
+            if normalized_email
+            else VerificationStatus.DRAFT,
         )
         db.add(user)
         await db.commit()

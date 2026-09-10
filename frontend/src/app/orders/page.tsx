@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Package, ChevronRight, Truck, ShoppingBasket } from 'lucide-react';
+import { Package, ChevronRight, Truck, ShoppingBasket, MapPin, Calendar } from 'lucide-react';
 import { PromoStrip } from '@/components/layout/promo-strip';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -61,7 +61,7 @@ export default function OrdersPage() {
       <Header />
       <main className="mx-auto max-w-7xl px-4 py-8">
         <h1 className="text-2xl font-bold text-charcoal-800">{t('orders.title', language)}</h1>
-        <p className="mt-1 text-sm text-charcoal-500">{t('orders.filters', language)}</p>
+        <p className="mt-1 text-sm text-charcoal-500">Track all your orders and deliveries</p>
 
         <Tabs
           variant="pill"
@@ -112,6 +112,7 @@ export default function OrdersPage() {
               {orders.map((order) => {
                 const isDelivered = order.orderStatus === 'delivered';
                 const isCancelled = order.orderStatus === 'cancelled';
+                const deliveryAddr = order.deliveryAddress;
                 return (
                   <Link key={order.id} href={`/orders/${order.id}`}>
                     <Card hoverable className={cn(isCancelled && 'opacity-60')}>
@@ -127,22 +128,37 @@ export default function OrdersPage() {
                             <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-charcoal-800">
                               <span>{order.orderNumber}</span>
                               <span className="text-xs font-normal text-charcoal-400">
-                                {order.items?.reduce((sum, item) => sum + item.quantity, 0)} {t('orders.itemsCount', language).replace('{{count}}', String(order.items?.reduce((sum, item) => sum + item.quantity, 0)))}
+                                {order.items?.reduce((sum, item) => sum + item.quantity, 0)} items
                               </span>
                             </p>
                             <p className="text-xs text-charcoal-500">
-                              {formatDate(order.createdAt)} • {t('orders.total', language)} <b className="text-charcoal-700">{formatCurrency(order.totalAmount)}</b>
+                              <Calendar className="mr-1 inline h-3 w-3" />
+                              {formatDate(order.createdAt)}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Badge variant={STATUS_VARIANTS[order.orderStatus]}>
-                            {t(`orders.${order.orderStatus}`, language) === `orders.${order.orderStatus}`
-                              ? order.orderStatus.replace(/_/g, ' ')
-                              : t(`orders.${order.orderStatus}`, language)}
-                          </Badge>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-charcoal-800">{formatCurrency(order.totalAmount)}</p>
+                            <Badge variant={STATUS_VARIANTS[order.orderStatus]}>
+                              {order.orderStatus.replace(/_/g, ' ')}
+                            </Badge>
+                          </div>
                           <ChevronRight className="h-4 w-4 text-charcoal-300" />
                         </div>
+                      </div>
+                      {deliveryAddr && (
+                        <div className="mt-2 flex items-center gap-1 text-[11px] text-charcoal-400 border-t border-charcoal-100 pt-2">
+                          <MapPin className="h-3 w-3" />
+                          Deliver to: {deliveryAddr.addressLine1}{deliveryAddr.district ? `, ${deliveryAddr.district}` : ''}
+                        </div>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {order.items.map((item) => (
+                          <span key={item.id} className="rounded-full bg-charcoal-100 px-2.5 py-1 text-[11px] text-charcoal-600">
+                            {item.productName} × {item.quantity}{item.unit}
+                          </span>
+                        ))}
                       </div>
                     </Card>
                   </Link>

@@ -11,6 +11,7 @@ import type {
   BulkRequirement,
   FarmerProfile,
   PaginatedResponse,
+  ProductListing,
 } from '@/types';
 
 export const queryKeys = {
@@ -124,7 +125,7 @@ export function useCart() {
   });
 }
 
-export function useUpdateCart(productId: string, quantity: number) {
+export function useUpdateCart(productId: string, quantity: number, successMessage?: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
@@ -132,7 +133,9 @@ export function useUpdateCart(productId: string, quantity: number) {
       return res;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.cart });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products('') });
+      if (successMessage) toast.success(successMessage);
     },
     onError: (error: unknown) => {
       toast.error(getErrorMessage(error));
@@ -175,8 +178,45 @@ export function useOrder(id: string) {
 export function useCreateOrder() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: unknown) => {
-      const res = await apiPost<Order>('/orders', payload);
+    mutationFn: async (payload: {
+      items: Array<{ productId: string; quantity: number; unit?: string; pricePerUnit?: number }>;
+      deliveryAddress: Record<string, unknown>;
+      deliverySlot?: { time?: string };
+      paymentMethod?: string;
+      idempotencyKey?: string;
+    }) => {
+      // 1. Sync cart items to the backend cart (skip local-only demo products).
+      const realItems = payload.items.filter((item) => !item.productId.startsWith('local-'));
+      for (const item of realItems) {
+        await apiPost<{ id: string }>('/orders/cart/items', {
+          product_listing_id: item.productId,
+          quantity: item.quantity,
+        }).catch(() => {
+          // Item may no longer be listed; let checkout report the real error.
+        });
+      }
+
+      // 2. Run checkout against the backend.
+      const res = await apiPost<{
+        order?: Order;
+        payment?: { id?: string };
+        message?: string;
+      }>('/orders/checkout', {
+        delivery_address_json: payload.deliveryAddress,
+        payment_method: payload.paymentMethod ?? 'upi',
+        notes: payload.deliverySlot?.time ? `Delivery slot: ${payload.deliverySlot.time}` : undefined,
+        idempotency_key: payload.idempotencyKey ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      });
+
+      // 3. For pre-paid methods (UPI/card/netbanking/wallet), complete the payment.
+      const paymentId = res.payment?.id ?? (res as { payment?: string }).payment as string | undefined;
+      if (paymentId && payload.paymentMethod && payload.paymentMethod !== 'cod') {
+        await apiPost<{ id: string }>('/orders/payment/complete', {
+          payment_id: paymentId,
+          provider_reference: `mock-${Date.now()}`,
+        }).catch(() => {});
+      }
+
       return res;
     },
     onSuccess: async () => {
@@ -300,6 +340,75 @@ export function useDeleteMutation(
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [key] });
       if (successMessage) toast.success(successMessage);
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+}
+
+export function useCreateProduct() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      product: {
+        name: string;
+        name_tamil?: string;
+        category_id?: string;
+        category_slug?: string;
+        description?: string;
+        image_url?: string;
+        unit?: string;
+      };
+      listing: {
+        price_per_unit: number;
+        wholesale_price?: number;
+        grade: string;
+        available_quantity: number;
+        min_order_quantity: number;
+        harvest_date?: string;
+        packing_date?: string;
+        expiry_date?: string;
+        collection_center_id?: string;
+        organic_certified: boolean;
+        certification_doc_url?: string;
+        location_district?: string;
+        location_state?: string;
+        producer_type: string;
+        status: string;
+      };
+    }) => {
+      // First create the product
+      const productRes = await apiPost<Product>('/products', data.product);
+      // Then create the listing
+      const listingRes = await apiPost<ProductListing>('/products/listings', {
+        ...data.listing,
+        product_id: productRes.id,
+      });
+      return { product: productRes, listing: listingRes };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.products() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products('') });
+      toast.success('Product created successfully');
+    },
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+}
+
+export function useUpdateProduct() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { id: string; payload: Record<string, unknown> }) => {
+      const res = await apiPatch<{ id: string }>(`/products/${data.id}`, data.payload);
+      return res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.products() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.products('') });
+      toast.success('Product updated successfully');
     },
     onError: (error: unknown) => {
       toast.error(getErrorMessage(error));

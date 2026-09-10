@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Check, X, Package, ShoppingCart } from 'lucide-react';
+import { ChevronRight, Check, X, Package, ShoppingCart, Truck } from 'lucide-react';
 import { PromoStrip } from '@/components/layout/promo-strip';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
@@ -14,20 +14,82 @@ import { Tabs } from '@/components/ui/tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/ui/pagination';
 import { useOrders } from '@/hooks/useApi';
-import { useUIStore } from '@/store';
+import { useUIStore, useAuthStore, useOrdersStore, useNotificationsStore, useMarketplaceStore } from '@/store';
+import { apiPost } from '@/lib/api';
+import { toast } from 'sonner';
 import { t } from '@/i18n';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import type { OrderStatus } from '@/types';
 
-const ROLE_STATUSES: OrderStatus[] = ['placed', 'confirmed', 'processing', 'packed', 'in_transit', 'out_for_delivery', 'delivered', 'cancelled'];
+const ROLE_STATUSES: OrderStatus[] = ['placed', 'confirmed', 'processing', 'packed'];
 
 export default function ProducerOrdersPage() {
   const language = useUIStore((state) => state.language);
+  const user = useAuthStore((state) => state.user);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<OrderStatus | 'all'>('all');
 
+  // Get orders from the shared store for this farmer
+  const farmerOrders = useOrdersStore((s) => user ? s.getOrdersByFarmer(user.id) : []);
+  const updateFarmerOrderStatus = useOrdersStore((s) => s.updateFarmerOrderStatus);
+  const addNotification = useNotificationsStore((s) => s.addNotification);
+
+  // Also fetch from API
   const { data, isLoading } = useOrders({ mine: true, status: status === 'all' ? undefined : status, page, per_page: 8 });
-  const orders = data?.items ?? [];
+  const apiOrders = data?.items ?? [];
+
+  // Combine local farmer orders with API orders
+  const allOrders = [...farmerOrders.map((fo) => ({
+    id: fo.id,
+    orderNumber: fo.orderNumber,
+    orderStatus: fo.orderStatus as OrderStatus,
+    totalAmount: fo.totalAmount,
+    createdAt: fo.createdAt,
+    items: fo.items.map((item) => ({
+      id: item.id,
+      productName: item.productName,
+      quantity: item.quantity,
+      unit: item.unit,
+      pricePerUnit: item.pricePerUnit,
+      totalPrice: item.pricePerUnit * item.quantity,
+      farmerShareAmount: item.pricePerUnit * item.quantity * 0.7,
+    })),
+    farmerShare: fo.totalAmount * 0.7,
+  })), ...apiOrders];
+
+  const filteredOrders = status === 'all' ? allOrders : allOrders.filter((o) => o.orderStatus === status);
+
+  const acceptOrder = async (orderId: string) => {
+    updateFarmerOrderStatus(orderId, 'confirmed');
+    toast.success('Order accepted');
+
+    if (user) {
+      addNotification({
+        userId: user.id,
+        title: 'Order Confirmed',
+        message: `You have confirmed order #${orderId.slice(-6)}`,
+        type: 'order',
+        link: '/producer/orders',
+        orderId,
+      });
+    }
+  };
+
+  const rejectOrder = async (orderId: string) => {
+    updateFarmerOrderStatus(orderId, 'cancelled');
+    toast.success('Order rejected');
+
+    if (user) {
+      addNotification({
+        userId: user.id,
+        title: 'Order Rejected',
+        message: `Order #${orderId.slice(-6)} has been rejected`,
+        type: 'order',
+        link: '/producer/orders',
+        orderId,
+      });
+    }
+  };
 
   return (
     <>
@@ -35,8 +97,8 @@ export default function ProducerOrdersPage() {
       <Header />
       <main className="mx-auto max-w-7xl px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-xl font-bold text-charcoal-800">{t('producer.orders', language)}</h1>
-          <p className="mt-1 text-sm text-charcoal-500">{t('producer.ordersSubtitle', language)}</p>
+          <h1 className="text-xl font-bold text-charcoal-800">{t('producer.incomingOrders', language)}</h1>
+          <p className="mt-1 text-sm text-charcoal-500">{t('producer.incomingOrdersSubtitle', language)}</p>
         </div>
 
         <Tabs
@@ -53,7 +115,7 @@ export default function ProducerOrdersPage() {
         />
 
         <div className="mt-6">
-          {isLoading ? (
+          {isLoading && filteredOrders.length === 0 ? (
             <div className="space-y-3">
               {[0, 1, 2].map((index) => (
                 <div key={index} className="animate-pulse rounded-xl border border-charcoal-100 p-5">
@@ -64,57 +126,65 @@ export default function ProducerOrdersPage() {
                 </div>
               ))}
             </div>
-          ) : orders.length === 0 ? (
+          ) : filteredOrders.length === 0 ? (
             <EmptyState
               title={t('producer.noOrders', language)}
-              description={t('producer.noOrdersSubtitle', language)}
+              description={t('producer.incomingOrdersSubtitle', language)}
               icon={<ShoppingCart className="h-7 w-7" />}
             />
           ) : (
             <div className="space-y-3">
-              {orders.map((order) => {
+              {filteredOrders.map((order) => {
                 const isNew = order.orderStatus === 'placed' || order.orderStatus === 'confirmed';
+                const isLocal = order.id.startsWith('local-') || order.id.startsWith('fo-');
                 return (
-                  <Link key={order.id} href={`/orders/${order.id}`}>
-                    <Card hoverable>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <span className={cn(
-                            'flex h-10 w-10 items-center justify-center rounded-full',
-                            isNew ? 'bg-accent-100 text-accent-600' : 'bg-primary-100 text-primary-600'
-                          )}>
-                            {isNew ? <Check className="h-5 w-5" /> : <Package className="h-5 w-5" />}
-                          </span>
-                          <div>
-                            <p className="text-sm font-semibold text-charcoal-800">
-                              #{order.orderNumber}
-                              {isNew && <Badge variant="danger" className="ml-2">{t('producer.actionNeeded', language)}</Badge>}
-                            </p>
-                            <p className="text-xs text-charcoal-500">
-                              {formatDate(order.createdAt)} • {order.items.length} {t('producer.itemTypes', language)}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-charcoal-800">{formatCurrency(order.totalAmount)}</p>
-                            <p className="text-[11px] text-primary-700">{t('cart.estimatedFarmerShare', language)}: {formatCurrency(order.farmerShare)}</p>
-                          </div>
-                          <Badge variant={isNew ? 'warning' : 'info'}>
-                            {t(`orders.${order.orderStatus}`, language)}
-                          </Badge>
-                          <ChevronRight className="h-4 w-4 text-charcoal-300" />
+                  <Card key={order.id}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className={cn(
+                          'flex h-10 w-10 items-center justify-center rounded-full',
+                          isNew ? 'bg-accent-100 text-accent-600' : 'bg-primary-100 text-primary-600'
+                        )}>
+                          {isNew ? <Check className="h-5 w-5" /> : <Package className="h-5 w-5" />}
+                        </span>
+                        <div>
+                          <p className="text-sm font-semibold text-charcoal-800">
+                            #{order.orderNumber}
+                            {isNew && <Badge variant="danger" className="ml-2">{t('producer.actionNeeded', language)}</Badge>}
+                          </p>
+                          <p className="text-xs text-charcoal-500">
+                            {formatDate(order.createdAt)} • {order.items.length} {t('producer.itemTypes', language)}
+                          </p>
                         </div>
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-1.5 border-t border-charcoal-100 pt-3">
-                        {order.items.map((item) => (
-                          <span key={item.id} className="rounded-full bg-charcoal-100 px-2.5 py-1 text-[11px] text-charcoal-600">
-                            {item.productName} × {item.quantity}{item.unit}
-                          </span>
-                        ))}
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-charcoal-800">{formatCurrency(order.totalAmount)}</p>
+                          <p className="text-[11px] text-primary-700">{t('cart.estimatedFarmerShare', language)}: {formatCurrency(order.farmerShare)}</p>
+                        </div>
+                        <Badge variant={isNew ? 'warning' : 'info'}>
+                          {order.orderStatus.replace(/_/g, ' ')}
+                        </Badge>
                       </div>
-                    </Card>
-                  </Link>
+                      {isNew && (
+                        <div className="flex gap-2">
+                           <Button size="sm" variant="outline" onClick={() => acceptOrder(order.id)} className="border-green-600 text-green-700 hover:bg-green-50">
+                             <Check className="h-3 w-3 mr-1" /> Accept
+                           </Button>
+                          <Button size="sm" variant="danger" onClick={() => rejectOrder(order.id)}>
+                            <X className="h-3 w-3 mr-1" /> Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-charcoal-100 pt-3">
+                      {order.items.map((item) => (
+                        <span key={item.id} className="rounded-full bg-charcoal-100 px-2.5 py-1 text-[11px] text-charcoal-600">
+                          {item.productName} × {item.quantity}{item.unit}
+                        </span>
+                      ))}
+                    </div>
+                  </Card>
                 );
               })}
 

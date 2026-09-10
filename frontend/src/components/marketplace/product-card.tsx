@@ -51,6 +51,21 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted = false }:
     toast.success(t('products.addToCartSuccess', language));
   };
 
+  const handleBuyNow = () => {
+    if (outOfStock) return;
+    addItem({
+      id: `${product.id}-${selectedUnit}`,
+      productId: product.id,
+      product,
+      quantity: 1,
+      unit: selectedUnit,
+      pricePerUnit: product.currentPricePerUnit,
+      farmerShare: product.currentPricePerUnit * 0.7,
+      addedAt: new Date().toISOString(),
+    });
+    window.location.href = '/checkout';
+  };
+
   const handleWishlist = () => {
     onWishlistToggle?.(product.id);
     !isWishlisted
@@ -161,16 +176,26 @@ export function ProductCard({ product, onWishlistToggle, isWishlisted = false }:
                 {t('products.outOfStock', language)}
               </span>
             ) : (
-              <Button
-                size="sm"
-                fullWidth
-                onClick={handleAddToCart}
-                className="group/add flex-1"
-                aria-label={`${t('products.addToCart', language)} - ${product.name}`}
-              >
-                <ShoppingCart className="h-4 w-4" />
-                {t('products.addToCart', language)}
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  onClick={handleAddToCart}
+                  aria-label={`${t('products.addToCart', language)} - ${product.name}`}
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  {t('products.addToCart', language)}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={handleBuyNow}
+                  aria-label={`Buy Now - ${product.name}`}
+                >
+                  Buy Now
+                </Button>
+              </>
             )}
             <Button size="sm" variant="outline" onClick={() => setShowQuickView(true)} aria-label={t('products.quickView', language)}>
               <Eye className="h-4 w-4" />

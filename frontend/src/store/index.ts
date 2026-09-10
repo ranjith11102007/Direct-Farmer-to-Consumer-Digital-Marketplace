@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, Address, CartItem, ServiceArea } from '@/types';
+import type { User, Address, CartItem, ServiceArea, Product, Order, Notification } from '@/types';
 
 interface AuthState {
   user: User | null;
@@ -150,5 +150,172 @@ export const useUIStore = create<UIState>()(
     { name: 'vaikkal-ui' }
   )
 );
+
+interface FarmerProduct {
+  id: string;
+  name: string;
+  category: string;
+  currentPricePerUnit: number;
+  unit: string;
+  availableQuantity: number;
+  images: string[];
+  farmerId: string;
+  farmerName: string;
+  farmerLocation: string;
+  availability: 'in_stock' | 'low_stock' | 'out_of_stock';
+  stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock';
+  status: 'active' | 'inactive' | 'sold_out';
+  isOrganic: boolean;
+  grade: string;
+  sourceLocation: { district: string; state: string; village?: string };
+  avgRating: number;
+  createdAt: string;
+  [key: string]: unknown;
+}
+
+interface MarketplaceState {
+  farmerProducts: FarmerProduct[];
+  addFarmerProduct: (product: FarmerProduct) => void;
+  updateFarmerProduct: (id: string, updates: Partial<FarmerProduct>) => void;
+  removeFarmerProduct: (id: string) => void;
+  getProductsByFarmer: (farmerId: string) => FarmerProduct[];
+  getAllActiveProducts: () => FarmerProduct[];
+}
+
+export const useMarketplaceStore = create<MarketplaceState>()(
+  persist(
+    (set, get) => ({
+      farmerProducts: [],
+      addFarmerProduct: (product) =>
+        set((state) => ({ farmerProducts: [...state.farmerProducts, product] })),
+      updateFarmerProduct: (id, updates) =>
+        set((state) => ({
+          farmerProducts: state.farmerProducts.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          ),
+        })),
+      removeFarmerProduct: (id) =>
+        set((state) => ({
+          farmerProducts: state.farmerProducts.filter((p) => p.id !== id),
+        })),
+      getProductsByFarmer: (farmerId) =>
+        get().farmerProducts.filter((p) => p.farmerId === farmerId),
+      getAllActiveProducts: () =>
+        get().farmerProducts.filter((p) => p.status === 'active'),
+    }),
+    { name: 'vaikkal-marketplace' }
+  )
+);
+
+interface FarmerOrderItem {
+  id: string;
+  productName: string;
+  quantity: number;
+  unit: string;
+  pricePerUnit: number;
+}
+
+interface FarmerOrder {
+  id: string;
+  orderNumber: string;
+  customerId: string;
+  customerName: string;
+  customerPhone?: string;
+  farmerId: string;
+  farmerName: string;
+  items: FarmerOrderItem[];
+  totalAmount: number;
+  deliveryAddress?: string;
+  orderStatus: 'pending' | 'confirmed' | 'preparing' | 'ready_for_pickup' | 'picked_up' | 'out_for_delivery' | 'delivered' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface OrdersState {
+  farmerOrders: FarmerOrder[];
+  addFarmerOrder: (order: FarmerOrder) => void;
+  updateFarmerOrderStatus: (orderId: string, status: FarmerOrder['orderStatus']) => void;
+  getOrdersByFarmer: (farmerId: string) => FarmerOrder[];
+}
+
+export const useOrdersStore = create<OrdersState>()(
+  persist(
+    (set, get) => ({
+      farmerOrders: [],
+      addFarmerOrder: (order) =>
+        set((state) => ({ farmerOrders: [...state.farmerOrders, order] })),
+      updateFarmerOrderStatus: (orderId, status) =>
+        set((state) => ({
+          farmerOrders: state.farmerOrders.map((o) =>
+            o.id === orderId ? { ...o, orderStatus: status, updatedAt: new Date().toISOString() } : o
+          ),
+        })),
+      getOrdersByFarmer: (farmerId) =>
+        get().farmerOrders.filter((o) => o.farmerId === farmerId),
+    }),
+    { name: 'vaikkal-farmer-orders' }
+  )
+);
+
+interface NotificationItem {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'order' | 'product' | 'system' | 'promotion';
+  read: boolean;
+  link?: string;
+  createdAt: string;
+  orderId?: string;
+  productId?: string;
+}
+
+interface NotificationsState {
+  notifications: NotificationItem[];
+  addNotification: (notification: Omit<NotificationItem, 'id' | 'createdAt' | 'read'>) => void;
+  markAsRead: (id: string) => void;
+  markAllAsRead: (userId: string) => void;
+  getUnreadCount: (userId: string) => number;
+  getNotificationsByUser: (userId: string) => NotificationItem[];
+}
+
+export const useNotificationsStore = create<NotificationsState>()(
+  persist(
+    (set, get) => ({
+      notifications: [],
+      addNotification: (notification) =>
+        set((state) => ({
+          notifications: [
+            {
+              ...notification,
+              id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              read: false,
+              createdAt: new Date().toISOString(),
+            },
+            ...state.notifications,
+          ],
+        })),
+      markAsRead: (id) =>
+        set((state) => ({
+          notifications: state.notifications.map((n) =>
+            n.id === id ? { ...n, read: true } : n
+          ),
+        })),
+      markAllAsRead: (userId) =>
+        set((state) => ({
+          notifications: state.notifications.map((n) =>
+            n.userId === userId ? { ...n, read: true } : n
+          ),
+        })),
+      getUnreadCount: (userId) =>
+        get().notifications.filter((n) => n.userId === userId && !n.read).length,
+      getNotificationsByUser: (userId) =>
+        get().notifications.filter((n) => n.userId === userId),
+    }),
+    { name: 'vaikkal-notifications' }
+  )
+);
+
+export type { FarmerProduct, FarmerOrder, FarmerOrderItem, NotificationItem };
 
 export { create as createStore };

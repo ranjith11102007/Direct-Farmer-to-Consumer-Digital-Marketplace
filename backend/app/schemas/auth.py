@@ -8,11 +8,18 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 class RegisterRequest(BaseModel):
     email: EmailStr | None = None
-    phone: str = Field(min_length=10, max_length=15)
+    phone: str | None = Field(default=None, max_length=15)
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(min_length=1, max_length=255)
     role: str = "consumer"
     preferred_language: str = "ta"
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def blank_phone_to_none(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        return v
 
 
 class SendOtpRequest(BaseModel):
@@ -45,7 +52,7 @@ class UserOut(BaseModel):
 
     id: str
     email: str | None = None
-    phone: str
+    phone: str | None = None
     full_name: str
     role: str
     is_verified: bool

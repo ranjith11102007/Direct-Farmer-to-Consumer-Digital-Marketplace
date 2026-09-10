@@ -10,6 +10,21 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUIStore } from '@/store';
 import { t } from '@/i18n';
 import { isValidPhone } from '@/lib/utils';
+import type { UserRole } from '@/types';
+
+function redirectForRole(role: UserRole | undefined): string {
+  const dashboards: Record<string, string> = {
+    farmer: '/producer/dashboard',
+    fpo_admin: '/producer/dashboard',
+    fpo: '/producer/dashboard',
+    delivery_partner: '/delivery/dashboard',
+    delivery: '/delivery/dashboard',
+    bulk_buyer: '/bulk',
+    admin: '/admin/dashboard',
+    consumer: '/',
+  };
+  return dashboards[role ?? ''] ?? '/';
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -47,8 +62,8 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      await verifyOtp(phone, otp);
-      router.push('/');
+      const res = await verifyOtp(phone, otp);
+      router.push(redirectForRole(res.user?.role));
     } catch {
       setError(t('auth.otpError', language));
     } finally {
@@ -60,8 +75,8 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await loginWithEmail(email, password);
-      router.push('/');
+      const res = await loginWithEmail(email, password);
+      router.push(redirectForRole(res.user?.role));
     } catch {
       setError(t('auth.invalidCredentials', language));
     } finally {

@@ -11,6 +11,9 @@ from app.api.deps import (
     SessionDep,
 )
 from app.models.order import OrderStatus, Payment
+from app.models.notification import Notification, NotificationType, NotificationChannel
+from app.models.product import ListingStatus, ProductListing
+from app.models.farmer import FarmerProfile
 from app.schemas.common import ApiResponse, PaginatedResponse
 from app.schemas.order import (
     CancelOrderRequest,
@@ -27,6 +30,7 @@ from app.schemas.order import (
     SettlementOut,
 )
 from app.services.order import OrderService
+from app.services.notification import NotificationService
 from app.utils.validators import ValidationError
 from sqlalchemy import select
 
@@ -116,6 +120,34 @@ async def checkout(payload: CheckoutRequest, db: SessionDep, user: CurrentUser, 
         raise _err(error)
     if order is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Checkout failed.")
+
+    # Send notifications to farmers whose products were ordered.
+    try:
+        for item in order.items:
+            if item.producer_id:
+                farmer_profile = (
+                    await db.execute(
+                        select(FarmerProfile).where(FarmerProfile.id == item.producer_id)
+                    )
+                ).scalar_one_or_none()
+                if farmer_profile:
+                    listing = (
+                        await db.execute(
+                            select(ProductListing).where(ProductListing.id == item.product_listing_id)
+                        )
+                    ).scalar_one_or_none()
+                    product_name = listing.product.name if listing and listing.product else "a product"
+                    await NotificationService.create_notification(
+                        db,
+                        recipient_id=farmer_profile.user_id,
+                        notification_type=NotificationType.ORDER,
+                        title="New customer order",
+                        message=f"New order received for {item.quantity} {item.unit} {product_name} from a customer.",
+                        channel=NotificationChannel.IN_APP,
+                        data_json={"order_id": str(order.id), "product_name": product_name},
+                    )
+    except Exception:
+        pass  # Notifications are best-effort; don't fail the order.
 
     payment_payload = payments[0] if payments else None
     return ApiResponse(

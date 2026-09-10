@@ -35,7 +35,9 @@ export const ta = {
     wishlist: 'விருப்பப்பட்டியல்',
     notifications: 'அறிவிப்புகள்',
     myOrders: 'என் ஆர்டர்கள்',
+    addresses: 'முகவரிகள்',
     buyBulk: 'மொத்தமாக வாங்க',
+    incoming: 'வந்த ஆர்டர்கள்',
   },
   search: {
     placeholder: 'காய்கறிகள், பழங்கள், தானியங்களைத் தேடுங்கள்...',
@@ -370,6 +372,7 @@ export const ta = {
     verify: 'சரிபார்க்கவும்',
     continue: 'தொடரவும்',
     or: 'அல்லது',
+    continueWithGoogle: 'Google மூலம் தொடரவும்',
     loginWithEmail: 'மின்னஞ்சல் மூலம் உள்நுழைய',
     email: 'மின்னஞ்சல்',
     password: 'கடவுச்சொல்',

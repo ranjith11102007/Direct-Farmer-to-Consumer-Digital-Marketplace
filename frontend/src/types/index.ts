@@ -2,8 +2,10 @@ export type UserRole =
   | 'consumer'
   | 'farmer'
   | 'fpo'
+  | 'fpo_admin'
   | 'bulk_buyer'
   | 'delivery_partner'
+  | 'collection_center_operator'
   | 'admin'
   | 'support';
 

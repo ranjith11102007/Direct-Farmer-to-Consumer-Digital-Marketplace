@@ -96,22 +96,29 @@ app.add_middleware(
 )
 
 # ---------- Routes ----------
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(products.router, prefix="/api/v1")
-app.include_router(orders.router, prefix="/api/v1")
-app.include_router(producer.router, prefix="/api/v1")
-app.include_router(bulk.router, prefix="/api/v1")
-app.include_router(delivery.router, prefix="/api/v1")
-app.include_router(admin.router, prefix="/api/v1")
-app.include_router(ai_routes.router, prefix="/api/v1")
-app.include_router(notifications.router, prefix="/api/v1")
-app.include_router(traceability.router, prefix="/api/v1")
-app.include_router(location.router, prefix="/api/v1")
-app.include_router(reviews.router, prefix="/api/v1")
-app.include_router(group_orders.router, prefix="/api/v1")
-app.include_router(subscriptions.router, prefix="/api/v1")
-app.include_router(harvest_prebooking.router, prefix="/api/v1")
-app.include_router(sustainability.router, prefix="/api/v1")
+# Include every router under /api/v1, and again under /api/backend/api/v1 so the
+# same API is reachable both directly and through the Vercel "/api/backend" service.
+_API_ROUTERS = [
+    auth.router,
+    products.router,
+    orders.router,
+    producer.router,
+    bulk.router,
+    delivery.router,
+    admin.router,
+    ai_routes.router,
+    notifications.router,
+    traceability.router,
+    location.router,
+    reviews.router,
+    group_orders.router,
+    subscriptions.router,
+    harvest_prebooking.router,
+    sustainability.router,
+]
+for _router in _API_ROUTERS:
+    app.include_router(_router, prefix="/api/v1")
+    app.include_router(_router, prefix="/api/backend/api/v1")
 
 
 # ---------- Health ----------

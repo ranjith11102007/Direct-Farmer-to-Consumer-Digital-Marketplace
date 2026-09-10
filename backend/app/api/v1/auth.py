@@ -17,9 +17,11 @@ from app.schemas.auth import (
     VerifyOtpRequest,
 )
 from app.schemas.common import ApiResponse
+from app.models.farmer import FarmerProfile
 from app.services.auth import AuthService
 from app.models.user import UserRole
 from app.utils.validators import ValidationError
+import uuid
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -33,16 +35,26 @@ def _http_error(exc: Exception) -> HTTPException:
     )
 
 
+_ROLE_ALIASES: dict[str, UserRole] = {
+    "consumer": UserRole.CONSUMER,
+    "farmer": UserRole.FARMER,
+    "fpo": UserRole.FPO_ADMIN,
+    "fpo_admin": UserRole.FPO_ADMIN,
+    "bulk_buyer": UserRole.BULK_BUYER,
+    "delivery_partner": UserRole.DELIVERY_PARTNER,
+    "delivery": UserRole.DELIVERY_PARTNER,
+    "collection_center_operator": UserRole.COLLECTION_CENTER_OPERATOR,
+    "admin": UserRole.ADMIN,
+}
+
+
 @router.post(
     "/register",
     response_model=ApiResponse[TokenOut],
     dependencies=[RateLimitAuth],
 )
 async def register(payload: RegisterRequest, db: SessionDep):
-    try:
-        role = UserRole(payload.role) if payload.role in UserRole._value2member_map_ else UserRole.CONSUMER
-    except ValueError:
-        role = UserRole.CONSUMER
+    role = _ROLE_ALIASES.get(payload.role.lower(), UserRole.CONSUMER)
     data, error = await AuthService.register(
         db,
         email=payload.email or "",
@@ -54,6 +66,17 @@ async def register(payload: RegisterRequest, db: SessionDep):
     )
     if error:
         raise _http_error(error)
+    if role in (UserRole.FARMER, UserRole.FPO_ADMIN):
+        user_id = uuid.UUID(data["user"]["id"])
+        profile = FarmerProfile(
+            user_id=user_id,
+            farm_name=payload.full_name,
+            district="",
+            state="",
+            verification_status="draft",
+        )
+        db.add(profile)
+        await db.commit()
     return ApiResponse(data=jsonable_encoder(data), message="Registration successful.")
 
 

@@ -46,10 +46,30 @@ class ProductOut(BaseModel):
 class ProductCreate(BaseModel):
     name: str
     name_tamil: str | None = None
-    category_id: str
+    category_id: str | None = None
+    category_slug: str | None = None
     description: str | None = None
     image_url: str | None = None
     unit: str = "kg"
+
+
+class ProductUpdate(BaseModel):
+    name: str | None = None
+    name_tamil: str | None = None
+    description: str | None = None
+    unit: str | None = None
+    price_per_unit: float | None = Field(default=None, gt=0)
+    wholesale_price: float | None = Field(default=None, gt=0)
+    grade: str | None = None
+    available_quantity: float | None = Field(default=None, gt=0)
+    min_order_quantity: float | None = Field(default=None, gt=0)
+    harvest_date: date | None = None
+    packing_date: date | None = None
+    expiry_date: date | None = None
+    organic_certified: bool | None = None
+    location_district: str | None = None
+    location_state: str | None = None
+    status: str | None = None
 
 
 class ListingCreate(BaseModel):
