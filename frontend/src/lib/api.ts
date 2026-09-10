@@ -92,10 +92,14 @@ api.interceptors.response.use(
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const err = error as AxiosError<{ message?: string; detail?: string; error?: string }>;
+    const data = err.response?.data;
+    if (typeof data === 'string') {
+      return 'Service unavailable. Please try again.';
+    }
     return (
-      err.response?.data?.message ??
-      err.response?.data?.detail ??
-      err.response?.data?.error ??
+      data?.message ??
+      data?.detail ??
+      data?.error ??
       'Something went wrong. Please try again.'
     );
   }
