@@ -9,11 +9,4 @@ and as CHAR(32) on SQLite, so it works everywhere.
 """
 from __future__ import annotations
 
-from app.config import settings
-
-IS_POSTGRES = settings.DATABASE_URL.startswith(("postgresql", "postgres", "asyncpg"))
-
-if IS_POSTGRES:
-    from app.models.types import UUID
-else:
-    from sqlalchemy import Uuid as UUID
+from sqlalchemy import Uuid as UUID
