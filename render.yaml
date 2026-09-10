@@ -1,0 +1,95 @@
+# Render Blueprint — deploys the full Vaikkal stack from this repository.
+#
+# How to deploy:
+#   1. Create a free account at https://render.com
+#   2. Dashboard -> New -> Blueprint -> connect this GitHub repo.
+#   3. Render provisions PostgreSQL + Redis and deploys the backend & frontend,
+#      then re-deploys automatically on every push to `main`.
+#   4. (One-time) open the backend service -> Shell -> run: python seed.py
+#
+# Resources (all on the free tier):
+#   - Managed PostgreSQL 16 (expires after 30 days on free)
+#   - Managed Redis 7 (expires after 30 days on free)
+#   - Web service: FastAPI backend (sleeps when idle >15 min, cold start ~1 min)
+#   - Web service: Next.js frontend (sleeps when idle >15 min, cold start ~1 min)
+
+databases:
+  - name: vaikkal-db
+    plan: free
+    databaseName: vaikkal
+    user: vaikkal
+
+  - name: vaikkal-redis
+    plan: free
+
+services:
+  # -------- Backend API (FastAPI + uvicorn) --------
+  - type: web
+    name: vaikkal-backend
+    runtime: docker
+    dockerContext: ./backend
+    plan: free
+    region: oregon
+    port: 8000
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: DEMO_MODE
+        value: "true"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        fromService:
+          type: web
+          name: vaikkal-frontend
+          property: url
+      # Render's managed Postgres exposes PG* vars; SQLAlchemy (async) needs
+      # the postgresql+asyncpg:// scheme, so compose DATABASE_URL ourselves.
+      - key: DATABASE_URL
+        value: postgresql+asyncpg://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}
+      - key: PGHOST
+        fromDatabase:
+          name: vaikkal-db
+          property: host
+      - key: PGPORT
+        fromDatabase:
+          name: vaikkal-db
+          property: port
+      - key: PGDATABASE
+        fromDatabase:
+          name: vaikkal-db
+          property: database
+      - key: PGUSER
+        fromDatabase:
+          name: vaikkal-db
+          property: user
+      - key: PGPASSWORD
+        fromDatabase:
+          name: vaikkal-db
+          property: password
+      - key: REDIS_URL
+        fromDatabase:
+          name: vaikkal-redis
+          property: connectionString
+
+  # -------- Frontend (Next.js standalone output) --------
+  - type: web
+    name: vaikkal-frontend
+    runtime: docker
+    dockerContext: ./frontend
+    plan: free
+    region: oregon
+    healthCheckPath: /
+    envVars:
+      # Browser calls stay same-origin (/api) and are proxied server-side by
+      # Next.js rewrites to the backend, so no CORS issues on the live site.
+      - key: NEXT_PUBLIC_API_URL
+        value: /api
+      # Server-side rewrite target (baked into the build). If Render assigns a
+      # different subdomain after the first deploy, update this env var and
+      # trigger a redeploy.
+      - key: API_URL
+        value: https://vaikkal-backend.onrender.com
