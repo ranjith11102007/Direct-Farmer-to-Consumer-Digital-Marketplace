@@ -51,6 +51,20 @@ jobs:
       - name: Create database schema
         run: python -c "import asyncio; from app.database import init_db; asyncio.run(init_db())"
 
+      - name: Debug failing requests
+        run: |
+          python - <<'PYEOF'
+          from fastapi.testclient import TestClient
+          from app.main import app
+          c = TestClient(app)
+          r = c.post("/api/v1/auth/register", json={"phone": "9710000001", "password": "Strong@Pass123", "full_name": "Debug", "role": "consumer"})
+          print("REGISTER", r.status_code, r.text[:1000])
+          r = c.post("/api/v1/auth/login", json={"identifier": "9710000001", "password": "Strong@Pass123"})
+          print("LOGIN", r.status_code, r.text[:1000])
+          r = c.get("/api/v1/products/categories")
+          print("CATEGORIES", r.status_code, r.text[:1000])
+          PYEOF
+
       - name: Run tests
         run: python -m pytest -q
 
